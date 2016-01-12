@@ -5,7 +5,7 @@ I have thought about designing a software to notify me about the time to rest. A
 
 there is free alternatives software of this kind but with many dependencies, which make them much more bigger and weight, I just need a simple and easy one.
 
-![Alt text](http://www.github.com/smileboywtu/worker-timer/screen/main.png)
+![Alt text](https://github.com/smileboywtu/worker-timer/blob/master/screen/main.png)
 
 environment
 ===========
