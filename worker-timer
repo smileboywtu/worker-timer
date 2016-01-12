@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+
+"""
+    this program was first developed to schedule the worker for a
+    period time of work, not long or short.
+
+    some programmer like me, always work for a project and forget
+    the time to rest, this is very harmful to the body. if we work
+    for a long time without rest, we'd care more about our health.
+
+    this comes with this little program to notify us the time.
+
+    design time: 2016 / 1 / 11
+    author: smile boy
+    environment: ubuntu 14.04 python3
+
+"""
+
+import sys
+import time
+import pyglet
+import threading
+import os.path as pathchecker
+from datetime import datetime as daytime
+from gi.repository import Gtk, GObject
+
+
+class WorkerTimer(Gtk.Window):
+
+    def __init__(self):
+        Gtk.Window.__init__(self, title="Worker Timer")
+        self.__init_components()
+        self.__start_background_timer_worker()
+
+    def __init_components(self):
+        "init the graphic components"
+
+        # init member
+        self.timer_counter = 0
+        self.task_time = None
+        self.timer_list = None
+        self.media_path = None
+        self.timer_selected = None
+
+        # add the layout
+        notebooklayout = Gtk.Notebook()
+        self.add(notebooklayout)
+
+        # work with the layout
+        notebooklayout.append_page(
+            self.__create_schedule_book(),
+            Gtk.Label("schedule"))
+
+        notebooklayout.append_page(
+            self.__create_timer_book(),
+            Gtk.Label("timers"))
+
+        notebooklayout.append_page(
+            self.__create_version_book(),
+            Gtk.Label("about"))
+
+    def __create_schedule_book(self):
+        "return the schedule book"
+        schedulepane = Gtk.Box(spacing=6)
+        schedulepane.set_border_width(10)
+
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        schedulepane.pack_start(listbox, True, True, 0)
+
+        # current time
+        listrow = Gtk.ListBoxRow()
+        listbox.add(listrow)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        listrow.add(hbox)
+
+        timelabel = Gtk.Label("current time:", xalign=0)
+        currenttime = Gtk.Label(xalign=0)
+        # use timer to update the time
+        GObject.timeout_add(500, self.__get_time, currenttime)
+        hbox.pack_start(timelabel, True, True, 0)
+        hbox.pack_start(currenttime, False, True, 0)
+
+        # work time period
+        listrow = Gtk.ListBoxRow()
+        listbox.add(listrow)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        listrow.add(hbox)
+
+        worktime = Gtk.Label("work period(min):", xalign=0)
+        timestore = Gtk.ListStore(int, str)
+        times = (10, 15, 10, 25, 30, 45, 60)
+        for id, item in enumerate(times):
+            timestore.append([id, str(item)])
+        timelist = Gtk.ComboBox.new_with_model_and_entry(timestore)
+        timelist.set_entry_text_column(1)
+        timelist.get_child().set_width_chars(4)
+        timelist.connect("changed", self.__on_work_time_changed)
+        hbox.pack_start(worktime, True, True, 0)
+        hbox.pack_start(timelist, False, True, 0)
+
+        # notify media
+        listrow = Gtk.ListBoxRow()
+        listbox.add(listrow)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        listrow.add(hbox)
+
+        medialabel = Gtk.Label("notify media", xalign=0)
+        mediastore = Gtk.ListStore(str, str)
+        medias = [("Default", "./media/default.wav"),
+                  ("GAME OVER", "./media/gameover.mp3"),
+                  ("Gun", "./media/gun.mp3")]
+        for media, path in medias:
+            mediastore.append([path, media])
+        mediabox = Gtk.ComboBox.new_with_model_and_entry(mediastore)
+        mediabox.connect("changed", self.__on_notify_media_changed)
+        mediabox.set_entry_text_column(1)
+        mediabox.get_child().set_width_chars(10)
+        hbox.pack_start(medialabel, True, True, 0)
+        hbox.pack_start(mediabox, False, True, 0)
+
+        # schedule from now
+        listrow = Gtk.ListBoxRow()
+        listbox.add(listrow)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        listrow.add(hbox)
+
+        startfromnow = Gtk.Label("schedule task from now", xalign=0)
+        scheduletask = Gtk.Button("schedule")
+        scheduletask.connect("clicked", self.__on_schedule_button_clicked)
+        hbox.pack_start(startfromnow, True, True, 0)
+        hbox.pack_start(scheduletask, False, True, 0)
+
+        # stop until time
+        listrow = Gtk.ListBoxRow()
+        listbox.add(listrow)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        listrow.add(hbox)
+
+        stopuntiltime = Gtk.Label("stop task until", xalign=0)
+        lhbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        hourentry = Gtk.Entry()
+        hourentry.set_text("00")
+        hourentry.set_max_length(2)
+        hourentry.set_width_chars(3)
+        timeseperator = Gtk.Label(":")
+        minuteentry = Gtk.Entry()
+        minuteentry.set_text("00")
+        minuteentry.set_max_length(2)
+        minuteentry.set_width_chars(3)
+        lhbox.pack_start(hourentry, False, True, 0)
+        lhbox.pack_start(timeseperator, False, True, 0)
+        lhbox.pack_start(minuteentry, False, True, 0)
+        watch = Gtk.Button("watch")
+        watch.connect("clicked", self.__on_watch_button_clicked,
+                      (hourentry, minuteentry))
+        hbox.pack_start(stopuntiltime, True, True, 0)
+        hbox.pack_start(lhbox, True, True, 0)
+        hbox.pack_start(watch, False, True, 0)
+
+        return schedulepane
+
+    def __create_timer_book(self):
+        "return the timer list book"
+        timerlistpane = Gtk.Grid()
+        timerlistpane.set_column_homogeneous(True)
+        timerlistpane.set_row_homogeneous(True)
+
+        # set up the list model
+        self.timer_list = Gtk.ListStore(int, str, int, int, str)
+        treeview = Gtk.TreeView.new_with_model(self.timer_list)
+        selection = treeview.get_selection()
+        selection.connect("changed", self.__on_timer_selected_changed)
+        for i, name in enumerate(["id", "starter", "total", "remain", "media"]):
+            render = Gtk.CellRendererText()
+            column = Gtk.TreeViewColumn(name, render, text=i)
+            treeview.append_column(column)
+        scrollablepane = Gtk.ScrolledWindow()
+        scrollablepane.set_vexpand(True)
+        scrollablepane.add(treeview)
+        delete = Gtk.Button("delete")
+        delete.connect("clicked", self.__on_delete_button_clicked)
+        timerlistpane.attach(scrollablepane, 0, 0, 4, 4)
+        timerlistpane.attach_next_to(delete, scrollablepane,
+                                     Gtk.PositionType.BOTTOM, 1, 1)
+
+        return timerlistpane
+
+    def __create_version_book(self):
+        "create the version book"
+        versionpane = Gtk.Box()
+        versionpane.set_border_width(10)
+        introduction = Gtk.Label()
+        versionpane.add(introduction)
+
+        introduction.set_text(
+            "worker timer is small program help users\n"
+            "to schedule the ordinary task time. It will\n"
+            "notify user to rest some time after short\n"
+            "time of work. \n\n"
+            "author: smileboy \n"
+            "build time: 2016 / 1 / 11 \n"
+            "source: github@smileboywtu")
+
+        return versionpane
+
+    def __get_time(self, label):
+        "update the current time"
+        label.set_text("{0:02d}:{1:02d}:{2:02d}".format(
+                                            daytime.now().hour,
+                                            daytime.now().minute,
+                                            daytime.now().second))
+        return True
+
+    def __worker_runner(self):
+        "runner of background worker"
+        while True:
+            for index, row in enumerate(self.timer_list):
+                path = Gtk.TreePath(index)
+                treeiter = self.timer_list.get_iter(path)
+                starter = row[1].split(':')
+                starter = int(starter[1]) + int(starter[0]) * 60
+                current = daytime.now()
+                current = current.minute + current.hour * 60
+                delta = row[2] - current + starter
+                self.timer_list[treeiter][3] = delta
+                if delta <= 0:
+                    self.__notify_user(treeiter)
+            time.sleep(0.5)
+
+    def __start_background_timer_worker(self):
+        "run background to update the time"
+        worker = threading.Thread(target=self.__worker_runner)
+        worker.daemon = True
+        worker.start()
+
+    def __notify_user(self, treeiter):
+        "use thread to update remain time"
+        mediapath = self.timer_list[treeiter][-1]
+        mediapath = './media/' + mediapath
+        try:
+            media = pyglet.media.load(mediapath, streaming=False)
+            media.play()
+        except:
+            sys.stderr.write("Resource Error: no resource find. \n")
+        finally:
+            self.timer_list.remove(treeiter)
+
+    def __on_work_time_changed(self, widget):
+        "the work time combobox value change"
+        tree_iter = widget.get_active_iter()
+        if tree_iter is not None:
+            model = widget.get_model()
+            row_id, time = model[tree_iter][:2]
+            self.task_time = int(time)
+        else:
+            entry = widget.get_child()
+            time = entry.get_text()
+            try:
+                self.task_time = int(time)
+            except ValueError:
+                self.task_time = None
+                sys.stderr.write("ValueError: only number support.\n")
+
+    def __on_notify_media_changed(self, widget):
+        "user change the notify"
+        tree_iter = widget.get_active_iter()
+        if tree_iter is not None:
+            model = widget.get_model()
+            path, media = model[tree_iter][:2]
+            self.media_path = path
+        else:
+            entry = widget.get_child()
+            path = "./media/" + entry.get_text() + ".mp3"
+            if pathchecker.isfile(path):
+                self.media_path = path
+            else:
+                sys.stderr.write("Error: file not exist.\n")
+
+    def __on_timer_selected_changed(self, selection):
+        "timer selected changed"
+        model, treeiter = selection.get_selected()
+        if treeiter is not None:
+            self.timer_selected = treeiter
+        else:
+            self.timer_selected = None
+
+    def __on_schedule_button_clicked(self, widget):
+        "on schedule task button clicked"
+        if self.task_time is not None and self.media_path is not None:
+            self.timer_counter += 1
+            self.timer_list.append([self.timer_counter,
+                                   "{:02d}:{:02d}".format(
+                                            daytime.now().hour,
+                                            daytime.now().minute),
+                                    self.task_time,
+                                    self.task_time,
+                                    self.media_path.split('/')[-1]])
+        else:
+            sys.stderr.write("Error: set task time and media first.\n")
+
+    def __on_watch_button_clicked(self, widget, entries):
+        "on watch button clicked"
+        hourentry, minuteentry = entries
+        try:
+            self.timer_counter += 1
+            hour = int(hourentry.get_text())
+            minute = int(minuteentry.get_text())
+            starter = daytime.now()
+            total = (hour - starter.hour) * 60 + minute - starter.minute
+            if total > 0:
+                self.timer_list.append([self.timer_counter,
+                                        "{:02d}:{:02d}".format(
+                                            starter.hour,
+                                            starter.minute),
+                                        total,
+                                        total,
+                                        self.media_path.split('/')[-1]])
+        except ValueError:
+            sys.stderr.write("ValueError: only number support.\n")
+
+    def __on_delete_button_clicked(self, widget):
+        "on delete timer button clicked"
+        if self.timer_selected is not None:
+            self.timer_list.remove(self.timer_selected)
+
+
+def main():
+    "start the graph"
+    GObject.threads_init()
+    app = WorkerTimer()
+    app.connect("delete-event", Gtk.main_quit)
+    app.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()
