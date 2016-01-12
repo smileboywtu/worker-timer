@@ -107,9 +107,7 @@ class WorkerTimer(Gtk.Window):
 
         medialabel = Gtk.Label("notify media", xalign=0)
         mediastore = Gtk.ListStore(str, str)
-        medias = [("Default", "./media/default.wav"),
-                  ("GAME OVER", "./media/gameover.mp3"),
-                  ("Gun", "./media/gunshot.mp3")]
+        medias = [("Default", "./media/default.wav")]
         for media, path in medias:
             mediastore.append([path, media])
         mediabox = Gtk.ComboBox.new_with_model_and_entry(mediastore)
