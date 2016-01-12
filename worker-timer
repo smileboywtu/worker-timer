@@ -109,7 +109,7 @@ class WorkerTimer(Gtk.Window):
         mediastore = Gtk.ListStore(str, str)
         medias = [("Default", "./media/default.wav"),
                   ("GAME OVER", "./media/gameover.mp3"),
-                  ("Gun", "./media/gun.mp3")]
+                  ("Gun", "./media/gunshot.mp3")]
         for media, path in medias:
             mediastore.append([path, media])
         mediabox = Gtk.ComboBox.new_with_model_and_entry(mediastore)
@@ -215,17 +215,21 @@ class WorkerTimer(Gtk.Window):
     def __worker_runner(self):
         "runner of background worker"
         while True:
-            for index, row in enumerate(self.timer_list):
-                path = Gtk.TreePath(index)
-                treeiter = self.timer_list.get_iter(path)
-                starter = row[1].split(':')
+            removes = []
+            treeiter = self.timer_list.get_iter_first()
+            while treeiter is not None:
+                starter = self.timer_list[treeiter][1].split(':')
                 starter = int(starter[1]) + int(starter[0]) * 60
                 current = daytime.now()
                 current = current.minute + current.hour * 60
-                delta = row[2] - current + starter
+                delta = self.timer_list[treeiter][2] - current + starter
                 self.timer_list[treeiter][3] = delta
                 if delta <= 0:
+                    removes.append(treeiter)
                     self.__notify_user(treeiter)
+                treeiter = self.timer_list.iter_next(treeiter)
+            for item in removes:
+                self.timer_list.remove(item)
             time.sleep(0.5)
 
     def __start_background_timer_worker(self):
@@ -243,8 +247,6 @@ class WorkerTimer(Gtk.Window):
             media.play()
         except:
             sys.stderr.write("Resource Error: no resource find. \n")
-        finally:
-            self.timer_list.remove(treeiter)
 
     def __on_work_time_changed(self, widget):
         "the work time combobox value change"
