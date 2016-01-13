@@ -224,8 +224,11 @@ class WorkerTimer(Gtk.Window):
                 self.timer_list[treeiter][3] = delta
                 if delta <= 0:
                     removes.append(treeiter)
-                    self.__notify_user(treeiter)
                 treeiter = self.timer_list.iter_next(treeiter)
+            # notify user
+            if len(removes) > 0:
+                self.__notify_user(removes[0])
+            # remove timers
             for item in removes:
                 self.timer_list.remove(item)
             time.sleep(0.5)
